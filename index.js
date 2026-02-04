@@ -653,4 +653,4 @@ if (args[0] === "wgamble") {
 /* =====================
    LOGIN
 ===================== */
-client.login(process.env.DISCORD_TOKEN);
+client.login(process.env.MTQ2NzQzMjYyMzAwODc3NjI4NQ.GSbmht.K2bXlEBLLQlwygS4ySnJ5syEg2RyVBKYgGaCgQ);
