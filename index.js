@@ -620,23 +620,26 @@ if (args[0] === "wgamble") {
     activeBloom = null;
     setMeta("activeBloom", null);
   }
+if (
+  activeBloom &&
+  typeof activeBloom.code === "string" &&
+  content.toUpperCase() === activeBloom.code
+) {
+  if (lastBloomWinner === user.id) return;
 
-  if (activeBloom && content === activeBloom.code.toLowerCase()) {
-    if (lastBloomWinner === user.id) return;
+  user.petals_table += activeBloom.petals;
+  user.blossoms += 1;
+  lastBloomWinner = user.id;
 
-    user.petals_table += activeBloom.petals;
-    user.blossoms++;
-    lastBloomWinner = user.id;
+  setMeta("lastBloomWinner", lastBloomWinner);
+  setMeta("activeBloom", null);
 
-    setMeta("lastBloomWinner", lastBloomWinner);
-    setMeta("activeBloom", null);
+  message.channel.send(
+    `🌺 <@${user.id}> picked the bloom and gained **${activeBloom.petals.toLocaleString()} petals!**`
+  );
 
-    message.channel.send(
-      `🌺 <@${user.id}> picked the bloom and gained **${activeBloom.petals} petals!**`
-    );
-
-    activeBloom = null;
-  }
+  activeBloom = null;
+}
 
   /* =====================
      HELLO RESPONDER
