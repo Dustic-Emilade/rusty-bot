@@ -307,10 +307,6 @@ function generateShop() {
     INSERT INTO shop (name, rarity, price, color_data)
     VALUES (?, ?, ?, ?)
   `);
-
-  for (const item of items) {
-    insert.run(item.name, item.rarity, item.price, item.color_data);
-  }
   
 function loadShop() {
   const items = db.prepare("SELECT * FROM shop").all();
