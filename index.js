@@ -252,6 +252,16 @@ function randomHex({ min = 0, max = 255 }) {
       .padStart(2, "0");
   return `#${v()}${v()}${v()}`;
 }
+const COLOR_WORDS = [
+  "rose", "mint", "peach", "lavender", "sky", "sage",
+  "ember", "velvet", "plum", "ivory", "denim", "jade",
+  "coral", "ash", "cream", "berry", "smoke", "honey"
+];
+
+function generateColorName(rarity) {
+  const word = COLOR_WORDS[Math.floor(Math.random() * COLOR_WORDS.length)];
+  return `${rarity}${word}`.slice(0, 15);
+}
 
 function generateColorByRarity(rarity) {
   if (rarity === "common") {
@@ -265,10 +275,7 @@ function generateColorByRarity(rarity) {
   }
   return randomHex({});
 }
-function generateColorName(hex, rarity) {
-  const base = hex.replace("#", "").slice(0, 6);
-  return `${rarity}${base}`.slice(0, 15);
-}
+
 function generateShop() {
   db.prepare("DELETE FROM shop").run();
 
@@ -277,7 +284,7 @@ function generateShop() {
   const addItem = (rarity, price, count) => {
     for (let i = 0; i < count; i++) {
       const hex = generateColorByRarity(rarity);
-      const name = generateColorName(hex, rarity);
+      const name = generateColorName(rarity);
 
       items.push({
         name,
@@ -303,10 +310,7 @@ function generateShop() {
 }
 
 
-  const insert = db.prepare(`
-    INSERT INTO shop (name, rarity, price, color_data)
-    VALUES (?, ?, ?, ?)
-  `);
+
   
 function loadShop() {
   const items = db.prepare("SELECT * FROM shop").all();
@@ -438,12 +442,14 @@ if (args[0] === "wshop") {
     =====================*/
   const embed = new MessageEmbed()
     .setTitle("🛒 Name Color Shop")
-    .setColor("#57F287")
+    .setColor("#57F287") // neutral shop color
     .setFooter({ text: "Shop rotates every 8 days • Buy with wbuy <name>" });
 
   shop.forEach(item => {
+    const square = colorSquare(item.color_data);
+
     embed.addField(
-      `${colorSquare(item.color_data)} ${item.name}`,
+      `${square} ${item.name}`,
       `**${item.rarity.toUpperCase()}**\n` +
       `Price: ${item.price.toLocaleString()} 🌸\n` +
       `Hex: \`${item.color_data}\`\n` +
