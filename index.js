@@ -25,6 +25,8 @@ CREATE TABLE IF NOT EXISTS users (
   blossoms INTEGER,
   dm_status TEXT,
 
+  equipped_color TEXT,
+
   gamble_a_wins INTEGER,
   gamble_a_losses INTEGER,
   gamble_b_wins INTEGER,
@@ -138,6 +140,8 @@ function getUser(id) {
       blossoms: 0,
       dm_status: "ask",
 
+     equipped_color: null,
+
       gamble_a_wins: 0,
       gamble_a_losses: 0,
       gamble_b_wins: 0,
@@ -153,6 +157,7 @@ function getUser(id) {
     id, messages, xp, level,
     petals_table, petals_bag,
     blossoms, dm_status,
+    equipped_color,
     gamble_a_wins, gamble_a_losses,
     gamble_b_wins, gamble_b_losses,
     gamble_c_wins, gamble_c_losses,
@@ -170,6 +175,8 @@ function getUser(id) {
   user.petals_bag,
   user.blossoms,
   user.dm_status,
+
+  user.equipped_color,
 
   user.gamble_a_wins,
   user.gamble_a_losses,
@@ -196,6 +203,7 @@ function saveUser(u) {
       petals_bag=?,
       blossoms=?,
       dm_status=?,
+      equipped_color=?,
 
       gamble_a_wins=?,
       gamble_a_losses=?,
@@ -215,6 +223,8 @@ function saveUser(u) {
     u.petals_bag,
     u.blossoms,
     u.dm_status,
+
+    u.equipped_color,
 
     u.gamble_a_wins,
     u.gamble_a_losses,
@@ -244,6 +254,30 @@ function saveUser(u) {
 
   return "◼️";
 }
+async function getOrCreateColorRole(guild, colorName, hex) {
+  let role = guild.roles.cache.find(r => r.name === colorName);
+
+  if (!role) {
+    role = await guild.roles.create({
+      name: colorName,
+      color: hex,
+      mentionable: false,
+      hoist: false,
+      reason: "Color role for shop system"
+    });
+  }
+
+  return role;
+}
+
+function getAllColorRoleNames() {
+  return [
+    ...FIXED_COLORS.common,
+    ...FIXED_COLORS.neon,
+    ...FIXED_COLORS.rare
+  ].map(c => c.name);
+}
+
 
 const COLOR_WORDS = [
   "rose", "mint", "peach", "lavender", "sky", "sage",
@@ -639,6 +673,65 @@ ${itemList}`
     message.channel.send(`🪑 Moved **${amt} petals** to table`);
     return;
   }
+  if (args[0] === "wequip") {
+  if (!user.equipped_color) {
+    message.channel.send("❌ You don’t have a color ready to equip. Use `wget <color>` first.");
+    return;
+  }
+
+  const color =
+    FIXED_COLORS.common.find(c => c.name === user.equipped_color) ||
+    FIXED_COLORS.neon.find(c => c.name === user.equipped_color) ||
+    FIXED_COLORS.rare.find(c => c.name === user.equipped_color);
+
+  if (!color) {
+    message.channel.send("❌ That color no longer exists.");
+    return;
+  }
+
+  const allColorNames = getAllColorRoleNames();
+  const rolesToRemove = message.member.roles.cache.filter(r =>
+    allColorNames.includes(r.name)
+  );
+
+  if (rolesToRemove.size > 0) {
+    await message.member.roles.remove(rolesToRemove);
+  }
+
+  const role = await getOrCreateColorRole(
+    message.guild,
+    color.name,
+    color.hex
+  );
+
+  await message.member.roles.add(role);
+
+  message.channel.send(`🎨 Equipped **${color.name}**`);
+  return;
+}
+if (args[0] === "wremove") {
+  if (!user.equipped_color) {
+    message.channel.send("❌ You don’t have a color equipped.");
+    return;
+  }
+
+  const colorName = user.equipped_color;
+
+  const role = message.guild.roles.cache.find(r => r.name === colorName);
+  if (role && message.member.roles.cache.has(role.id)) {
+    await message.member.roles.remove(role);
+  }
+
+  db.prepare(
+    "INSERT INTO inventory (user_id, item_name) VALUES (?,?)"
+  ).run(user.id, colorName);
+
+  user.equipped_color = null;
+  saveUser(user);
+
+  message.channel.send(`🎒 **${colorName}** was removed and returned to your bag.`);
+  return;
+}
 
   if (args[0] === "wgive") {
     const amt = parseInt(args[1]);
