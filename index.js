@@ -44,6 +44,14 @@ CREATE TABLE IF NOT EXISTS shop (
   color_data TEXT
 )
 `).run();
+// 👇 SHOP TABLE
+db.prepare(`
+CREATE TABLE IF NOT EXISTS inventory (
+  user_id TEXT,
+  item_name TEXT,
+  PRIMARY KEY (user_id, item_name)
+)
+`).run();
 
 // META TABLE
 db.prepare(`
@@ -51,6 +59,7 @@ CREATE TABLE IF NOT EXISTS meta (
   key TEXT PRIMARY KEY,
   value TEXT
 )`).run();
+
 
 /* =====================
    META HELPERS
@@ -229,8 +238,11 @@ function generateShop() {
       rarity: "common",
       price: SHOP_PRICES.common,
       color_data: "#cccccc"
+  
     });
-  }
+  }function colorSquare(hex) {
+  return "⬛"; // placeholder for now
+}
 
   for (let i = 1; i <= 3; i++) {
     items.push({
@@ -382,7 +394,10 @@ if (args[0] === "wadmingive") {
           item.rarity === "rare" ? "🔴" :
           "🌈";
 
-        return `${icon} **${item.name}** — ${item.price.toLocaleString()} 🌸`;
+return `${icon} **${item.rarity.toUpperCase()}**
+▸ ${item.name}
+▸ ${item.price.toLocaleString()} 🌸
+▸ \`${item.color_data}\``;
       }).join("\n")
     );
 
@@ -445,10 +460,22 @@ if (args[0] === "wadmingive") {
     return;
   }
 
-  if (content === "wbag") {
-    message.channel.send(`🎒 Bag petals: **${user.petals_bag}**`);
-    return;
-  }
+ const items = db.prepare(
+  "SELECT item_name FROM inventory WHERE user_id=?"
+).all(user.id);
+
+const itemList = items.length
+  ? items.map(i => `• ${i.item_name}`).join("\n")
+  : "None";
+
+message.channel.send(
+  `🎒 **Bag**
+Blossoms: ${user.blossoms}
+Petals: ${user.petals_bag}
+
+🎨 **Colors**
+${itemList}`
+);
 
   if (content === "wpetals") {
     message.channel.send(`🌸 Total petals: **${user.petals_table + user.petals_bag}**`);
@@ -509,6 +536,48 @@ if (args[0] === "wadmingive") {
     message.channel.send(`🎁 Gave **${amt} petals** to <@${mentionedUser.id}>`);
     return;
   }
+  if (args[0] === "wbuy") {
+  const itemName = args[1];
+  if (!itemName) {
+    message.channel.send("❌ Usage: wbuy <colorname>");
+    return;
+  }
+
+  const item = db.prepare(
+    "SELECT * FROM shop WHERE name=?"
+  ).get(itemName);
+
+  if (!item) {
+    message.channel.send("❌ That color is not in the shop.");
+    return;
+  }
+
+  if (user.petals_table < item.price) {
+    message.channel.send("❌ Not enough petals on your table.");
+    return;
+  }
+
+  const owned = db.prepare(
+    "SELECT 1 FROM inventory WHERE user_id=? AND item_name=?"
+  ).get(user.id, item.name);
+
+  if (owned) {
+    message.channel.send("❌ You already own this color.");
+    return;
+  }
+
+  user.petals_table -= item.price;
+  saveUser(user);
+
+  db.prepare(
+    "INSERT INTO inventory (user_id, item_name) VALUES (?,?)"
+  ).run(user.id, item.name);
+
+  message.channel.send(
+    `🎨 You bought **${item.name}** and stored it in your bag!`
+  );
+  return;
+}
 
   /* =====================
      COINFLIP
