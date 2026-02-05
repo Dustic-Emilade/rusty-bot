@@ -488,14 +488,64 @@ if (args[0] === "wadmingive") {
     return;
   }
 
-  const amt = parseInt(args[1]);
-  const targetUser = message.mentions.users.first();
-
-  if (!targetUser || isNaN(amt)) {
-    message.channel.send("❌ Usage: wadmingive <amount> @user");
+ if (args[0] === "wget") {
+  // ───────── PETALS: wget all ─────────
+  if (args[1] === "all") {
+    user.petals_table += user.petals_bag;
+    user.petals_bag = 0;
+    saveUser(user);
+    message.channel.send("🪑 All petals moved to table");
     return;
   }
 
+  // ───────── PETALS: wget <amount> ─────────
+  const maybeNumber = parseInt(args[1]);
+  if (!isNaN(maybeNumber)) {
+    const amt = maybeNumber;
+
+    if (amt <= 0 || amt > user.petals_bag) {
+      message.channel.send("❌ Invalid amount");
+      return;
+    }
+
+    user.petals_bag -= amt;
+    user.petals_table += amt;
+    saveUser(user);
+
+    message.channel.send(`🪑 Moved **${amt} petals** to table`);
+    return;
+  }
+
+  // ───────── COLORS: wget <color name> ─────────
+  const colorName = args.slice(1).join(" ");
+
+  if (!colorName) {
+    message.channel.send("❌ Usage: wget <amount | color>");
+    return;
+  }
+
+  const owned = db.prepare(
+    "SELECT 1 FROM inventory WHERE user_id=? AND LOWER(item_name)=?"
+  ).get(user.id, colorName.toLowerCase());
+
+  if (!owned) {
+    message.channel.send("❌ You don’t own that color.");
+    return;
+  }
+
+  // Remove color from bag
+  db.prepare(
+    "DELETE FROM inventory WHERE user_id=? AND LOWER(item_name)=?"
+  ).run(user.id, colorName.toLowerCase());
+
+  user.equipped_color = colorName;
+  saveUser(user);
+
+  message.channel.send(
+    `🎨 **${colorName}** is ready.\nNow use \`wequip\` to equip it, or \`wremove\` to unequip it later.`
+  );
+  return;
+}
   const target = getUser(targetUser.id);
   target.petals_table += amt;
   saveUser(target);
@@ -767,8 +817,8 @@ if (args[0] === "wremove") {
   }
 
   const item = db.prepare(
-    "SELECT * FROM shop WHERE name=?"
-  ).get(itemName);
+  "SELECT * FROM shop WHERE LOWER(name) = ?"
+).get(itemName.toLowerCase());
 
   if (!item) {
     message.channel.send("❌ That color is not in the shop.");
@@ -792,8 +842,8 @@ if (user.blossoms < blossomCost) {
   }
 
   const owned = db.prepare(
-    "SELECT 1 FROM inventory WHERE user_id=? AND item_name=?"
-  ).get(user.id, item.name);
+  "SELECT 1 FROM inventory WHERE user_id=? AND LOWER(item_name)=?"
+).get(user.id, item.name.toLowerCase());
 
   if (owned) {
     message.channel.send("❌ You already own this color.");
@@ -804,9 +854,9 @@ if (user.blossoms < blossomCost) {
 user.blossoms -= blossomCost;
 saveUser(user);
 
-  db.prepare(
-    "INSERT INTO inventory (user_id, item_name) VALUES (?,?)"
-  ).run(user.id, item.name);
+ db.prepare(
+  "INSERT INTO inventory (user_id, item_name) VALUES (?,?)"
+).run(user.id, item.name.toLowerCase());
 
   message.channel.send(
   `🎨 You bought **${item.name}**.\nTo view your colors, use \`wbag\`.`
