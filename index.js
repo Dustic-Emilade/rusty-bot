@@ -362,7 +362,7 @@ function isAdmin(member) {
 /* =====================
    MESSAGE HANDLER
 ===================== */
-client.on("messageCreate", (message) => {
+client.on("messageCreate", async (message) => {
   if (message.author.bot) return;
 
   const content = message.content.toLowerCase();
@@ -434,28 +434,24 @@ if (args[0] === "wadmingive") {
 if (args[0] === "wshop") {
   const shop = loadShop();
 
-/*======================
-    Shop settings
-    =====================*/
-  const embed = new MessageEmbed()
-    .setTitle("🛒 Name Color Shop")
-    .setColor("#57F287") // neutral shop color
-    .setFooter({ text: "Shop rotates every 8 days • Buy with wbuy <name>" });
+  for (const item of shop) {
+    const embed = new MessageEmbed()
+      .setTitle(`${colorSquare(item.color_data)} ${item.name}`)
+      .setColor(item.color_data)
+      .setDescription(
+        `**${item.rarity.toUpperCase()}**\n` +
+        `Price: ${item.price.toLocaleString()} 🌸\n` +
+        `Hex: \`${item.color_data}\`\n\n` +
+        `\`wbuy ${item.name}\``
+      )
+      .setFooter({ text: "Shop rotates every 8 days" });
 
-  shop.forEach(item => {
-    const square = colorSquare(item.color_data);
+    await message.channel.send({ embeds: [embed] });
 
-    embed.addField(
-      `${square} ${item.name}`,
-      `**${item.rarity.toUpperCase()}**\n` +
-      `Price: ${item.price.toLocaleString()} 🌸\n` +
-      `Hex: \`${item.color_data}\`\n` +
-      `\`wbuy ${item.name}\``,
-      true
-    );
-  });
+    // ⏳ tiny delay to avoid silent rate-limit drops
+    await new Promise(r => setTimeout(r, 350));
+  }
 
-  message.channel.send({ embeds: [embed] });
   return;
 }
 
