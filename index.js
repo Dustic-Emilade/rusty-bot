@@ -460,22 +460,26 @@ return `${icon} **${item.rarity.toUpperCase()}**
     return;
   }
 
- const items = db.prepare(
-  "SELECT item_name FROM inventory WHERE user_id=?"
-).all(user.id);
+if (args[0] === "wbag") {
+  const items = db.prepare(
+    "SELECT item_name FROM inventory WHERE user_id=?"
+  ).all(user.id);
 
-const itemList = items.length
-  ? items.map(i => `• ${i.item_name}`).join("\n")
-  : "None";
+  const itemList = items.length
+    ? items.map(i => `• ${i.item_name}`).join("\n")
+    : "None";
 
-message.channel.send(
-  `🎒 **Bag**
+  message.channel.send(
+    `🎒 **Bag**
 Blossoms: ${user.blossoms}
 Petals: ${user.petals_bag}
 
 🎨 **Colors**
 ${itemList}`
-);
+  );
+
+  return; // 🚨 THIS IS CRITICAL
+}
 
   if (content === "wpetals") {
     message.channel.send(`🌸 Total petals: **${user.petals_table + user.petals_bag}**`);
