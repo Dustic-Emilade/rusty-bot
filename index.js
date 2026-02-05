@@ -403,16 +403,16 @@ function generateShop() {
     [...arr].sort(() => 0.5 - Math.random()).slice(0, count);
 
   for (const item of pickRandom(FIXED_COLORS.common, 5)) {
-    insert.run(item.name, "common", 1000, item.hex);
-  }
+  insert.run(item.name, "common", SHOP_PRICES.common, item.hex);
+}
 
-  for (const item of pickRandom(FIXED_COLORS.neon, 3)) {
-    insert.run(item.name, "neon", 3000, item.hex);
-  }
+for (const item of pickRandom(FIXED_COLORS.neon, 3)) {
+  insert.run(item.name, "neon", SHOP_PRICES.neon, item.hex);
+}
 
-  for (const item of pickRandom(FIXED_COLORS.rare, 2)) {
-    insert.run(item.name, "rare", 10000, item.hex);
-  }
+for (const item of pickRandom(FIXED_COLORS.rare, 2)) {
+  insert.run(item.name, "rare", SHOP_PRICES.rare, item.hex);
+}
 }
 
   
@@ -627,14 +627,16 @@ if (args[0] === "wbag") {
     ? items.map(i => `• ${i.item_name}`).join("\n")
     : "None";
 
-  message.channel.send(
-    `🎒 **Bag**
+message.channel.send(
+  `🎒 **Bag**
 Blossoms: ${user.blossoms}
 Petals: ${user.petals_bag}
 
 🎨 **Colors**
-${itemList}`
-  );
+${itemList}
+
+To use items, use \`wget <item>\`.`
+);
 
   return; // 🚨 THIS IS CRITICAL
 }
@@ -758,7 +760,7 @@ if (args[0] === "wremove") {
     return;
   }
   if (args[0] === "wbuy") {
-  const itemName = args[1];
+  const itemName = args.slice(1).join(" ");
   if (!itemName) {
     message.channel.send("❌ Usage: wbuy <colorname>");
     return;
@@ -772,6 +774,17 @@ if (args[0] === "wremove") {
     message.channel.send("❌ That color is not in the shop.");
     return;
   }
+  const blossomCost =
+  item.rarity === "neon" ? 1 :
+  item.rarity === "rare" ? 3 : 0;
+
+if (user.blossoms < blossomCost) {
+  message.channel.send(
+    `❌ You need **${blossomCost} blossom(s)** to buy this color.`
+  );
+  return;
+}
+
 
   if (user.petals_table < item.price) {
     message.channel.send("❌ Not enough petals on your table.");
@@ -788,15 +801,16 @@ if (args[0] === "wremove") {
   }
 
   user.petals_table -= item.price;
-  saveUser(user);
+user.blossoms -= blossomCost;
+saveUser(user);
 
   db.prepare(
     "INSERT INTO inventory (user_id, item_name) VALUES (?,?)"
   ).run(user.id, item.name);
 
   message.channel.send(
-    `🎨 You bought **${item.name}** and stored it in your bag!`
-  );
+  `🎨 You bought **${item.name}**.\nTo view your colors, use \`wbag\`.`
+);
   return;
 }
 
