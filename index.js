@@ -419,27 +419,17 @@ for (const item of pickRandom(FIXED_COLORS.rare, 2)) {
   
 function loadShop() {
   const items = db.prepare("SELECT * FROM shop").all();
-  const now = Date.now();
-  const rotationMs = SHOP_ROTATION_DAYS * 24 * 60 * 60 * 1000;
-
-  // First-ever shop
+  // First-ever startup: shop is empty
   if (items.length === 0) {
     generateShop();
-    setMeta("lastShopRotation", now);
+    setMeta("lastShopRotation", Date.now());
     return db.prepare("SELECT * FROM shop").all();
   }
 
-  // Time-based rotation
-  if (now - lastShopRotation >= rotationMs) {
-    generateShop();
-    lastShopRotation = now;
-    setMeta("lastShopRotation", now);
-    return db.prepare("SELECT * FROM shop").all();
-  }
-
-  // Normal case: reuse existing shop
+  // Otherwise: return the SAME shop for everyone
   return items;
 }
+
 
 
 /* =====================
@@ -461,6 +451,18 @@ function bloomPetals() {
 ===================== */
 client.once("ready", () => {
   console.log(`🤖 Rusty online as ${client.user.tag}`);
+
+  const now = Date.now();
+  const rotationMs = SHOP_ROTATION_DAYS * 24 * 60 * 60 * 1000;
+  const lastRotation = getMeta("lastShopRotation", 0);
+
+  if (now - lastRotation >= rotationMs) {
+    console.log("🛒 Rotating shop (8-day refresh)");
+    generateShop();
+    setMeta("lastShopRotation", now);
+  } else {
+    console.log("🛒 Shop is still current");
+  }
 });
 
 function isAdmin(member) {
