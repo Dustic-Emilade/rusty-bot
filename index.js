@@ -35,6 +35,16 @@ CREATE TABLE IF NOT EXISTS users (
   gamble_d_losses INTEGER
 )`).run();
 
+// Shop table
+db.prepare(`
+CREATE TABLE IF NOT EXISTS shop (
+  name TEXT PRIMARY KEY,
+  rarity TEXT,
+  price INTEGER,
+  color_data TEXT
+)
+`).run();
+
 // META TABLE
 db.prepare(`
 CREATE TABLE IF NOT EXISTS meta (
@@ -74,6 +84,13 @@ let lastBloomWinner = getMeta("lastBloomWinner", null);
 ===================== */
 const BLOOM_INTERVAL = 280;
 const BLOOM_TIMEOUT_MINUTES = 10;
+
+const SHOP_PRICES = {
+  common: 1500,
+  neon: 3000,
+  rare: 9000,
+  god: { min: 100000, max: 400000 }
+};
 
 /* =====================
    HELLO TRANSLATIONS
@@ -201,6 +218,58 @@ function saveUser(u) {
     u.id
   );
 }
+function generateShop() {
+  db.prepare("DELETE FROM shop").run();
+
+  const items = [];
+
+  for (let i = 1; i <= 5; i++) {
+    items.push({
+      name: `pastelitem${i}`,
+      rarity: "common",
+      price: SHOP_PRICES.common,
+      color_data: "#cccccc"
+    });
+  }
+
+  for (let i = 1; i <= 3; i++) {
+    items.push({
+      name: `neonitem${i}`,
+      rarity: "neon",
+      price: SHOP_PRICES.neon,
+      color_data: "#ff00ff"
+    });
+  }
+
+  for (let i = 1; i <= 2; i++) {
+    items.push({
+      name: `rareitem${i}`,
+      rarity: "rare",
+      price: SHOP_PRICES.rare,
+      color_data: "#ff0000"
+    });
+  }
+
+  const insert = db.prepare(`
+    INSERT INTO shop (name, rarity, price, color_data)
+    VALUES (?, ?, ?, ?)
+  `);
+
+  for (const item of items) {
+    insert.run(item.name, item.rarity, item.price, item.color_data);
+  }
+}
+function loadShop() {
+  const items = db.prepare("SELECT * FROM shop").all();
+
+  if (items.length === 0) {
+    generateShop();
+    return db.prepare("SELECT * FROM shop").all();
+  }
+
+  return items;
+}
+
 
 /* =====================
    BLOOM HELPERS
@@ -298,6 +367,27 @@ if (args[0] === "wadmingive") {
     message.channel.send({ embeds: [embed] });
     return;
   }
+  if (content === "wshop") {
+  const shop = loadShop();
+
+  const embed = new MessageEmbed()
+    .setTitle("🛒 Color Shop")
+    .setColor("#57F287")
+    .setDescription(
+      shop.map(item => {
+        const icon =
+          item.rarity === "common" ? "🟢" :
+          item.rarity === "neon" ? "🟣" :
+          item.rarity === "rare" ? "🔴" :
+          "🌈";
+
+        return `${icon} **${item.name}** — ${item.price.toLocaleString()} 🌸`;
+      }).join("\n")
+    );
+
+  message.channel.send({ embeds: [embed] });
+  return;
+}
 
   /* =====================
      DM SETTINGS
@@ -621,22 +711,27 @@ if (args[0] === "wgamble") {
     setMeta("activeBloom", null);
   }
 
-  if (activeBloom && content === activeBloom.code.toLowerCase()) {
-    if (lastBloomWinner === user.id) return;
+ if (
+  activeBloom &&
+  typeof activeBloom.code === "string" &&
+  content.toUpperCase() === activeBloom.code
+) {
+  if (lastBloomWinner === user.id) return;
 
-    user.petals_table += activeBloom.petals;
-    user.blossoms++;
-    lastBloomWinner = user.id;
+  user.petals_table += activeBloom.petals;
+  user.blossoms += 1;
+  lastBloomWinner = user.id;
 
-    setMeta("lastBloomWinner", lastBloomWinner);
-    setMeta("activeBloom", null);
+  setMeta("lastBloomWinner", lastBloomWinner);
+  setMeta("activeBloom", null);
 
-    message.channel.send(
-      `🌺 <@${user.id}> picked the bloom and gained **${activeBloom.petals} petals!**`
-    );
+  message.channel.send(
+    `🌺 <@${user.id}> picked the bloom and gained **${activeBloom.petals.toLocaleString()} petals!**`
+  );
 
-    activeBloom = null;
-  }
+  activeBloom = null;
+}
+
 
   /* =====================
      HELLO RESPONDER
