@@ -5,7 +5,11 @@ const Database = require("better-sqlite3");
    CLIENT
 ===================== */
 const client = new Client({
-  intents: [Intents.FLAGS.GUILDS, Intents.FLAGS.GUILD_MESSAGES]
+  intents: [
+    Intents.FLAGS.GUILDS,
+    Intents.FLAGS.GUILD_MESSAGES,
+    Intents.FLAGS.MESSAGE_CONTENT
+  ]
 });
 
 /* =====================
