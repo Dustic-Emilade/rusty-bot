@@ -16,6 +16,12 @@ const client = new Client({
    DATABASE
 ===================== */
 const db = new Database("rusty.db");
+try {
+  db.prepare("ALTER TABLE users ADD COLUMN equipped_color TEXT").run();
+  console.log("🧠 equipped_color column ensured");
+} catch (e) {
+  // column already exists, ignore
+}
 
 // Users table
 db.prepare(`
