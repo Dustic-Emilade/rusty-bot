@@ -97,10 +97,9 @@ const BLOOM_INTERVAL = 280;
 const BLOOM_TIMEOUT_MINUTES = 10;
 
 const SHOP_PRICES = {
-  common: 1500,
+  common: 1000,
   neon: 3000,
-  rare: 9000,
-  god: { min: 100000, max: 400000 }
+  rare: 10000
 };
 
 /* =====================
@@ -245,69 +244,134 @@ function saveUser(u) {
 
   return "◼️";
 }
-function randomHex({ min = 0, max = 255 }) {
-  const v = () =>
-    Math.floor(Math.random() * (max - min + 1) + min)
-      .toString(16)
-      .padStart(2, "0");
-  return `#${v()}${v()}${v()}`;
-}
+
 const COLOR_WORDS = [
   "rose", "mint", "peach", "lavender", "sky", "sage",
   "ember", "velvet", "plum", "ivory", "denim", "jade",
   "coral", "ash", "cream", "berry", "smoke", "honey"
 ];
 
-function generateColorName(rarity) {
-  const word = COLOR_WORDS[Math.floor(Math.random() * COLOR_WORDS.length)];
-  return `${rarity}${word}`.slice(0, 15);
-}
+const FIXED_COLORS = {
+  /* =====================
+     COMMON — muddy, pastel,
+     strange, unpopular
+  ===================== */
+  common: [
+    // dusty pinks / strawberries
+    { name: "Strawberry Ash", hex: "#C47A7A" },
+    { name: "Old Rose", hex: "#B07C86" },
+    { name: "Blush Clay", hex: "#B88A8A" },
+    { name: "Muted Carnation", hex: "#C08F9A" },
+    { name: "Rosewood Milk", hex: "#A97A7A" },
 
-function generateColorByRarity(rarity) {
-  if (rarity === "common") {
-    return randomHex({ min: 160, max: 230 }); // pastel
-  }
-  if (rarity === "neon") {
-    return randomHex({ min: 200, max: 255 }); // bright
-  }
-  if (rarity === "rare") {
-    return randomHex({ min: 80, max: 200 }); // rich
-  }
-  return randomHex({});
-}
+    // browns / taupes / weird neutrals
+    { name: "Mushroom Skin", hex: "#9B8F82" },
+    { name: "Wet Cardboard", hex: "#A39483" },
+    { name: "Dusty Bark", hex: "#8B6F5A" },
+    { name: "Soft Rust", hex: "#B07A5A" },
+    { name: "Clay Smoke", hex: "#9C7E6A" },
+
+    // sickly yellows / creams
+    { name: "Nicotine Wall", hex: "#C7B76A" },
+    { name: "Old Paper", hex: "#D4CBA3" },
+    { name: "Faded Mustard", hex: "#BFA24B" },
+    { name: "Warm Pollen", hex: "#D1B85A" },
+    { name: "Butter Dust", hex: "#D8C88B" },
+
+    // forest / swamp greens
+    { name: "Forest Floor", hex: "#4F5F3A" },
+    { name: "Moss Water", hex: "#667A4B" },
+    { name: "Swamp Fern", hex: "#5E6F46" },
+    { name: "Lichen Rock", hex: "#6A735A" },
+    { name: "Wet Olive", hex: "#6F7A3E" },
+
+    // gray-blues / non-colors
+    { name: "Rain Concrete", hex: "#8E9499" },
+    { name: "Washed Denim", hex: "#7C8A99" },
+    { name: "Storm Dust", hex: "#7F8790" },
+    { name: "Cold Cement", hex: "#8B9196" },
+    { name: "Blue Ash", hex: "#7E8A8F" },
+
+    // purples that barely qualify
+    { name: "Bruised Lilac", hex: "#8E7D8F" },
+    { name: "Faded Grape", hex: "#7A6A7F" },
+    { name: "Lavender Mold", hex: "#9A8FA3" },
+    { name: "Dust Violet", hex: "#847A8C" },
+    { name: "Plum Fog", hex: "#7F6F78" },
+
+    // odd oranges / browns
+    { name: "Burnt Apricot", hex: "#C4875A" },
+    { name: "Dead Peach", hex: "#D19A6A" },
+    { name: "Clay Orange", hex: "#B8744F" },
+    { name: "Rust Milk", hex: "#C28B6F" },
+    { name: "Ochre Fog", hex: "#B8914A" },
+
+    // near-grays / colorless colors
+    { name: "Hospital Sheet", hex: "#D1D6D2" },
+    { name: "Dishwater", hex: "#BFC6C2" },
+    { name: "Static Haze", hex: "#AEB5B1" },
+    { name: "Fog Rag", hex: "#C4CBC7" },
+    { name: "Pale Dust", hex: "#D8DED9" }
+  ],
+
+  /* =====================
+     NEON — cyberpunk
+     unchanged
+  ===================== */
+  neon: [
+    { name: "Neon Lime.exe", hex: "#39FF14" },
+    { name: "Pink Overdrive", hex: "#FF1AFF" },
+    { name: "Cyan Glitch", hex: "#00FFFF" },
+    { name: "Electric Sunset", hex: "#FF6F00" },
+    { name: "Ultraviolet Pulse", hex: "#8F00FF" },
+
+    { name: "Laser Magenta", hex: "#FF00CC" },
+    { name: "Signal Green", hex: "#00FF66" },
+    { name: "Cyber Aqua", hex: "#00FFD5" },
+    { name: "Voltage Yellow", hex: "#FFF700" },
+    { name: "Neon Ember", hex: "#FF3300" }
+  ],
+
+  /* =====================
+     RARE — ONLY 6
+     absolute extremes
+  ===================== */
+  rare: [
+    { name: "Absolute Void", hex: "#000000" },
+    { name: "Pure White", hex: "#FFFFFF" },
+    { name: "Brightest Red", hex: "#FF0000" },
+    { name: "Pure Green", hex: "#00FF00" },
+    { name: "Cobalt Core", hex: "#0047AB" },
+    { name: "Perfect Pink", hex: "#FFC0CB" }
+  ]
+};
+
 
 function generateShop() {
   db.prepare("DELETE FROM shop").run();
-
-  const items = [];
-
-  const addItem = (rarity, price, count) => {
-    for (let i = 0; i < count; i++) {
-      const hex = generateColorByRarity(rarity);
-      const name = generateColorName(rarity);
-
-      items.push({
-        name,
-        rarity,
-        price,
-        color_data: hex
-      });
-    }
-  };
-
-  addItem("common", SHOP_PRICES.common, 5);
-  addItem("neon", SHOP_PRICES.neon, 3);
-  addItem("rare", SHOP_PRICES.rare, 2);
 
   const insert = db.prepare(`
     INSERT INTO shop (name, rarity, price, color_data)
     VALUES (?, ?, ?, ?)
   `);
 
-  for (const item of items) {
-    insert.run(item.name, item.rarity, item.price, item.color_data);
+  const pickRandom = (arr, count) =>
+    [...arr].sort(() => 0.5 - Math.random()).slice(0, count);
+
+  for (const item of pickRandom(FIXED_COLORS.common, 5)) {
+    insert.run(item.name, "common", 1000, item.hex);
+  }
+
+  for (const item of pickRandom(FIXED_COLORS.neon, 3)) {
+    insert.run(item.name, "neon", 3000, item.hex);
+  }
+
+  for (const item of pickRandom(FIXED_COLORS.rare, 2)) {
+    insert.run(item.name, "rare", 10000, item.hex);
   }
 }
+
+  
   
 function loadShop() {
   const items = db.prepare("SELECT * FROM shop").all();
