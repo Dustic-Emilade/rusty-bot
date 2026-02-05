@@ -308,9 +308,6 @@ function generateShop() {
     insert.run(item.name, item.rarity, item.price, item.color_data);
   }
 }
-
-
-
   
 function loadShop() {
   const items = db.prepare("SELECT * FROM shop").all();
