@@ -87,10 +87,12 @@ const lastFlipMessageCount = {};
 let totalMessages = getMeta("totalMessages", 0);
 let activeBloom = getMeta("activeBloom", null);
 let lastBloomWinner = getMeta("lastBloomWinner", null);
+let lastShopRotation = getMeta("lastShopRotation", 0);
 
 /* =====================
    CONFIG
 ===================== */
+const SHOP_ROTATION_DAYS = 8;
 const BLOOM_INTERVAL = 280;
 const BLOOM_TIMEOUT_MINUTES = 10;
 
@@ -227,40 +229,68 @@ function saveUser(u) {
     u.id
   );
 }
+  function colorSquare(hex) {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+
+  if (r > 200 && g < 80 && b < 80) return "🟥";
+  if (r > 200 && g > 120 && b < 80) return "🟧";
+  if (r > 200 && g > 200 && b < 80) return "🟨";
+  if (r < 80 && g > 200 && b < 80) return "🟩";
+  if (r < 80 && g < 80 && b > 200) return "🟦";
+  if (r > 150 && g < 80 && b > 150) return "🟪";
+  if (r < 50 && g < 50 && b < 50) return "⬛";
+  if (r > 220 && g > 220 && b > 220) return "⬜";
+
+  return "◼️";
+}
+function randomHex({ min = 0, max = 255 }) {
+  const v = () =>
+    Math.floor(Math.random() * (max - min + 1) + min)
+      .toString(16)
+      .padStart(2, "0");
+  return `#${v()}${v()}${v()}`;
+}
+
+function generateColorByRarity(rarity) {
+  if (rarity === "common") {
+    return randomHex({ min: 160, max: 230 }); // pastel
+  }
+  if (rarity === "neon") {
+    return randomHex({ min: 200, max: 255 }); // bright
+  }
+  if (rarity === "rare") {
+    return randomHex({ min: 80, max: 200 }); // rich
+  }
+  return randomHex({});
+}
+function generateColorName(hex, rarity) {
+  const base = hex.replace("#", "").slice(0, 6);
+  return `${rarity}${base}`.slice(0, 15);
+}
 function generateShop() {
   db.prepare("DELETE FROM shop").run();
 
   const items = [];
 
-  for (let i = 1; i <= 5; i++) {
-    items.push({
-      name: `pastelitem${i}`,
-      rarity: "common",
-      price: SHOP_PRICES.common,
-      color_data: "#cccccc"
-  
-    });
-  }function colorSquare(hex) {
-  return "⬛"; // placeholder for now
-}
+  const addItem = (rarity, price, count) => {
+    for (let i = 0; i < count; i++) {
+      const hex = generateColorByRarity(rarity);
+      const name = generateColorName(hex, rarity);
 
-  for (let i = 1; i <= 3; i++) {
-    items.push({
-      name: `neonitem${i}`,
-      rarity: "neon",
-      price: SHOP_PRICES.neon,
-      color_data: "#ff00ff"
-    });
-  }
+      items.push({
+        name,
+        rarity,
+        price,
+        color_data: hex
+      });
+    }
+  };
 
-  for (let i = 1; i <= 2; i++) {
-    items.push({
-      name: `rareitem${i}`,
-      rarity: "rare",
-      price: SHOP_PRICES.rare,
-      color_data: "#ff0000"
-    });
-  }
+  addItem("common", SHOP_PRICES.common, 5);
+  addItem("neon", SHOP_PRICES.neon, 3);
+  addItem("rare", SHOP_PRICES.rare, 2);
 
   const insert = db.prepare(`
     INSERT INTO shop (name, rarity, price, color_data)
@@ -271,14 +301,38 @@ function generateShop() {
     insert.run(item.name, item.rarity, item.price, item.color_data);
   }
 }
+
+
+  const insert = db.prepare(`
+    INSERT INTO shop (name, rarity, price, color_data)
+    VALUES (?, ?, ?, ?)
+  `);
+
+  for (const item of items) {
+    insert.run(item.name, item.rarity, item.price, item.color_data);
+  }
+  
 function loadShop() {
   const items = db.prepare("SELECT * FROM shop").all();
+  const now = Date.now();
+  const rotationMs = SHOP_ROTATION_DAYS * 24 * 60 * 60 * 1000;
 
+  // First-ever shop
   if (items.length === 0) {
     generateShop();
+    setMeta("lastShopRotation", now);
     return db.prepare("SELECT * FROM shop").all();
   }
 
+  // Time-based rotation
+  if (now - lastShopRotation >= rotationMs) {
+    generateShop();
+    lastShopRotation = now;
+    setMeta("lastShopRotation", now);
+    return db.prepare("SELECT * FROM shop").all();
+  }
+
+  // Normal case: reuse existing shop
   return items;
 }
 
@@ -380,26 +434,27 @@ if (args[0] === "wadmingive") {
     message.channel.send({ embeds: [embed] });
     return;
   }
-  if (content === "wshop") {
+if (args[0] === "wshop") {
   const shop = loadShop();
 
+/*======================
+    Shop settings
+    =====================*/
   const embed = new MessageEmbed()
-    .setTitle("🛒 Color Shop")
+    .setTitle("🛒 Name Color Shop")
     .setColor("#57F287")
-    .setDescription(
-      shop.map(item => {
-        const icon =
-          item.rarity === "common" ? "🟢" :
-          item.rarity === "neon" ? "🟣" :
-          item.rarity === "rare" ? "🔴" :
-          "🌈";
+    .setFooter({ text: "Shop rotates every 8 days • Buy with wbuy <name>" });
 
-return `${icon} **${item.rarity.toUpperCase()}**
-▸ ${item.name}
-▸ ${item.price.toLocaleString()} 🌸
-▸ \`${item.color_data}\``;
-      }).join("\n")
+  shop.forEach(item => {
+    embed.addField(
+      `${colorSquare(item.color_data)} ${item.name}`,
+      `**${item.rarity.toUpperCase()}**\n` +
+      `Price: ${item.price.toLocaleString()} 🌸\n` +
+      `Hex: \`${item.color_data}\`\n` +
+      `\`wbuy ${item.name}\``,
+      true
     );
+  });
 
   message.channel.send({ embeds: [embed] });
   return;
