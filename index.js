@@ -1,6 +1,10 @@
 const { Client, Intents, MessageEmbed } = require("discord.js");
 const Database = require("better-sqlite3");
 
+const { REST } = require("@discordjs/rest");
+const { Routes } = require("discord-api-types/v9");
+
+
 /* =====================
    CLIENT
 ===================== */
@@ -449,21 +453,7 @@ function bloomPetals() {
 /* =====================
    READY
 ===================== */
-client.once("ready", () => {
-  console.log(`🤖 Rusty online as ${client.user.tag}`);
 
-  const now = Date.now();
-  const rotationMs = SHOP_ROTATION_DAYS * 24 * 60 * 60 * 1000;
-  const lastRotation = getMeta("lastShopRotation", 0);
-
-  if (now - lastRotation >= rotationMs) {
-    console.log("🛒 Rotating shop (8-day refresh)");
-    generateShop();
-    setMeta("lastShopRotation", now);
-  } else {
-    console.log("🛒 Shop is still current");
-  }
-});
 
 function isAdmin(member) {
   return member.permissions.has("Administrator");
@@ -485,13 +475,30 @@ client.on("messageCreate", async (message) => {
 ===================== */
 
 if (args[0] === "wadmingive") {
-  if (!isAdmin(message.member)) {
-    message.channel.send("❌ You don’t have permission to do that.");
+  if (!message.member.permissions.has("Administrator")) {
+    message.channel.send("❌ Admins only.");
     return;
   }
 
- if (args[0] === "wget") {
-  // ───────── PETALS: wget all ─────────
+  const amt = parseInt(args[1]);
+  const targetUser = message.mentions.users.first();
+
+  if (!targetUser || isNaN(amt) || amt <= 0) {
+    message.channel.send("❌ Usage: wadmingive <amount> @user");
+    return;
+  }
+
+  const target = getUser(targetUser.id);
+  target.petals_table += amt;
+  saveUser(target);
+
+  message.channel.send(
+    `🛠️ Gave **${amt.toLocaleString()} petals** to <@${targetUser.id}>`
+  );
+  return;
+}
+if (args[0] === "wget") {
+  // ─── PETALS: wget all ───
   if (args[1] === "all") {
     user.petals_table += user.petals_bag;
     user.petals_bag = 0;
@@ -500,7 +507,7 @@ if (args[0] === "wadmingive") {
     return;
   }
 
-  // ───────── PETALS: wget <amount> ─────────
+  // ─── PETALS: wget <amount> ───
   const maybeNumber = parseInt(args[1]);
   if (!isNaN(maybeNumber)) {
     const amt = maybeNumber;
@@ -518,7 +525,7 @@ if (args[0] === "wadmingive") {
     return;
   }
 
-  // ───────── COLORS: wget <color name> ─────────
+  // ─── COLORS: wget <color name> ───
   const colorName = args.slice(1).join(" ");
 
   if (!colorName) {
@@ -548,15 +555,8 @@ if (args[0] === "wadmingive") {
   );
   return;
 }
-  const target = getUser(targetUser.id);
-  target.petals_table += amt;
-  saveUser(target);
 
-  message.channel.send(
-    `🛠️ Gave **${amt.toLocaleString()} petals** to <@${targetUser.id}>`
-  );
-  return;
-}
+
 
   /* =====================
      HELP
@@ -788,8 +788,7 @@ if (args[0] === "wremove") {
 
   db.prepare(
     "INSERT INTO inventory (user_id, item_name) VALUES (?,?)"
-  ).run(user.id, colorName);
-
+  ).run(user.id, colorName.toLowerCase());
   user.equipped_color = null;
   saveUser(user);
 
@@ -1100,6 +1099,88 @@ if (args[0] === "wgamble") {
   }
 
   saveUser(user);
+});
+
+
+const adminCommands = [
+  {
+    name: "admin-commands",
+    description: "List admin-only commands and bot status"
+  }
+];
+
+client.once("ready", async () => {
+  console.log(`🤖 Rusty online as ${client.user.tag}`);
+
+  // ─── Shop rotation check ───
+  const now = Date.now();
+  const rotationMs = SHOP_ROTATION_DAYS * 24 * 60 * 60 * 1000;
+  const lastRotation = getMeta("lastShopRotation", 0);
+
+  if (now - lastRotation >= rotationMs) {
+    console.log("🛒 Rotating shop (8-day refresh)");
+    generateShop();
+    setMeta("lastShopRotation", now);
+  } else {
+    console.log("🛒 Shop is still current");
+  }
+
+  // ─── Slash command registration ───
+  const rest = new REST({ version: "9" }).setToken(process.env.DISCORD_TOKEN);
+
+  try {
+    await rest.put(
+      Routes.applicationCommands(client.user.id),
+      { body: adminCommands }
+    );
+    console.log("✅ Admin slash commands registered");
+  } catch (err) {
+    console.error("❌ Failed to register admin slash commands", err);
+  }
+});
+
+client.on("interactionCreate", async (interaction) => {
+  if (!interaction.isCommand()) return;
+
+  if (interaction.commandName === "admin-commands") {
+    if (!interaction.member.permissions.has("Administrator")) {
+      await interaction.reply({
+        content: "❌ Admins only.",
+        ephemeral: true
+      });
+      return;
+    }
+
+    const embed = new MessageEmbed()
+      .setTitle("🛠️ Admin Commands")
+      .setColor("#ED4245")
+      .setDescription(`
+**Text Admin Commands**
+• \`wadmingive <amount> @user\`
+• \`wstats\`
+• \`wblossomdrop\`
+
+**Slash Commands**
+• /admin-commands
+
+**Inactive / Disabled**
+• /wipe-user
+• /force-rotation
+• /economy-reset
+      `)
+      .addField(
+        "📊 Bot Status",
+        `Messages tracked: **${totalMessages}**
+Active bloom: **${activeBloom ? "YES" : "NO"}**
+Shop rotation: **Every ${SHOP_ROTATION_DAYS} days**`
+      )
+      .setFooter({ text: "Admin-only controls panel" });
+
+    await interaction.reply({
+      embeds: [embed],
+      ephemeral: true
+    });
+  }
 });
 
 /* =====================
