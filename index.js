@@ -19,7 +19,7 @@ const client = new Client({
 /* =====================
    DATABASE
 ===================== */
-const db = new Database("rusty.db");
+const db = new Database(process.env.DB_PATH || "rusty.db");
 try {
   db.prepare("ALTER TABLE users ADD COLUMN equipped_color TEXT").run();
   console.log("🧠 equipped_color column ensured");
@@ -104,6 +104,9 @@ let totalMessages = getMeta("totalMessages", 0);
 let activeBloom = getMeta("activeBloom", null);
 let lastBloomWinner = getMeta("lastBloomWinner", null);
 let lastShopRotation = getMeta("lastShopRotation", 0);
+let botStatus = getMeta("botStatus", "alive");
+let botVersion = getMeta("botVersion", "alpha");
+let updateMessage = getMeta("updateMessage", "");
 
 /* =====================
    CONFIG
@@ -469,6 +472,32 @@ client.on("messageCreate", async (message) => {
   const args = content.split(" ");
   const mentionedUser = message.mentions.users.first();
   const user = getUser(message.author.id);
+  //// Stats system
+  if (args[0] === "wstats") {
+  const embed = new MessageEmbed()
+    .setTitle("🤖 Bot Status")
+    .setColor("#5865F2")
+    .addField("Status", botStatus, true)
+    .addField("Version", botVersion, true)
+    .addField(
+      "Blossoms Dropped",
+      `${db.prepare("SELECT SUM(value) as v FROM meta WHERE key LIKE 'blossoms_%'").get()?.v || 0}`,
+      true
+    );
+
+  message.channel.send({ embeds: [embed] });
+
+  if (updateMessage && updateMessage.length > 0) {
+    const updateEmbed = new MessageEmbed()
+      .setTitle("🟢 Upcoming Updates")
+      .setColor("#57F287")
+      .setDescription(updateMessage);
+
+    message.channel.send({ embeds: [updateEmbed] });
+  }
+
+  return;
+}
 
   /* =====================
    ADMIN: GIVE PETALS
@@ -1106,6 +1135,30 @@ const adminCommands = [
   {
     name: "admin-commands",
     description: "List admin-only commands and bot status"
+  },
+  {
+    name: "change-stat",
+    description: "Change bot status",
+    options: [
+      {
+        name: "status",
+        type: 3,
+        description: "alive / offline / updating / restarting",
+        required: true
+      }
+    ]
+  },
+  {
+    name: "update-add",
+    description: "Set update message (max 200 chars)",
+    options: [
+      {
+        name: "message",
+        type: 3,
+        description: "Update text",
+        required: true
+      }
+    ]
   }
 ];
 
@@ -1150,6 +1203,43 @@ client.on("interactionCreate", async (interaction) => {
       });
       return;
     }
+    if (interaction.commandName === "change-stat") {
+  if (!interaction.member.permissions.has("Administrator")) {
+    await interaction.reply({
+      content: "❌ Admins only.",
+      ephemeral: true
+    });
+    return;
+  }
+
+  const status = interaction.options.getString("status");
+  botStatus = status;
+  setMeta("botStatus", botStatus);
+
+  await interaction.reply({
+    content: `✅ Bot status set to **${botStatus}**`,
+    ephemeral: true
+  });
+}
+
+if (interaction.commandName === "update-add") {
+  if (!interaction.member.permissions.has("Administrator")) {
+    await interaction.reply({
+      content: "❌ Admins only.",
+      ephemeral: true
+    });
+    return;
+  }
+
+  const msg = interaction.options.getString("message").slice(0, 200);
+  updateMessage = msg;
+  setMeta("updateMessage", updateMessage);
+
+  await interaction.reply({
+    content: "✅ Update message saved.",
+    ephemeral: true
+  });
+}
 
     const embed = new MessageEmbed()
       .setTitle("🛠️ Admin Commands")
