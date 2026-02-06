@@ -19,7 +19,7 @@ const client = new Client({
 /* =====================
    DATABASE
 ===================== */
-const db = new Database(process.env.DB_PATH || "rusty.db");
+const db = new Database("rusty.db");
 try {
   db.prepare("ALTER TABLE users ADD COLUMN equipped_color TEXT").run();
   console.log("🧠 equipped_color column ensured");
