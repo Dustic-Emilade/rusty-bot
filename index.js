@@ -1,17 +1,32 @@
 const { Client, Intents, MessageEmbed } = require("discord.js");
 const Database = require("better-sqlite3");
+const handleWalterCommand = require("./walter");
+
+const { REST } = require("@discordjs/rest");
+const { Routes } = require("discord-api-types/v9");
+
 
 /* =====================
    CLIENT
 ===================== */
 const client = new Client({
-  intents: [Intents.FLAGS.GUILDS, Intents.FLAGS.GUILD_MESSAGES]
+  intents: [
+    Intents.FLAGS.GUILDS,
+    Intents.FLAGS.GUILD_MESSAGES,
+    Intents.FLAGS.MESSAGE_CONTENT
+  ]
 });
 
 /* =====================
    DATABASE
 ===================== */
 const db = new Database("rusty.db");
+try {
+  db.prepare("ALTER TABLE users ADD COLUMN equipped_color TEXT").run();
+  console.log("🧠 equipped_color column ensured");
+} catch (e) {
+  // column already exists, ignore
+}
 
 // Users table
 db.prepare(`
@@ -25,6 +40,8 @@ CREATE TABLE IF NOT EXISTS users (
   blossoms INTEGER,
   dm_status TEXT,
 
+  equipped_color TEXT,
+
   gamble_a_wins INTEGER,
   gamble_a_losses INTEGER,
   gamble_b_wins INTEGER,
@@ -35,22 +52,13 @@ CREATE TABLE IF NOT EXISTS users (
   gamble_d_losses INTEGER
 )`).run();
 
-// Shop table
-db.prepare(`
-CREATE TABLE IF NOT EXISTS shop (
-  name TEXT PRIMARY KEY,
-  rarity TEXT,
-  price INTEGER,
-  color_data TEXT
-)
-`).run();
-
 // META TABLE
 db.prepare(`
 CREATE TABLE IF NOT EXISTS meta (
   key TEXT PRIMARY KEY,
   value TEXT
 )`).run();
+
 
 /* =====================
    META HELPERS
@@ -78,19 +86,17 @@ const lastFlipMessageCount = {};
 let totalMessages = getMeta("totalMessages", 0);
 let activeBloom = getMeta("activeBloom", null);
 let lastBloomWinner = getMeta("lastBloomWinner", null);
+let lastShopRotation = getMeta("lastShopRotation", 0);
+let botStatus = getMeta("botStatus", "alive");
+let botVersion = getMeta("botVersion", "alpha");
+let updateMessage = getMeta("updateMessage", "");
 
 /* =====================
    CONFIG
 ===================== */
+const SHOP_ROTATION_DAYS = 8;
 const BLOOM_INTERVAL = 280;
 const BLOOM_TIMEOUT_MINUTES = 10;
-
-const SHOP_PRICES = {
-  common: 1500,
-  neon: 3000,
-  rare: 9000,
-  god: { min: 100000, max: 400000 }
-};
 
 /* =====================
    HELLO TRANSLATIONS
@@ -128,6 +134,8 @@ function getUser(id) {
       blossoms: 0,
       dm_status: "ask",
 
+     equipped_color: null,
+
       gamble_a_wins: 0,
       gamble_a_losses: 0,
       gamble_b_wins: 0,
@@ -143,12 +151,13 @@ function getUser(id) {
     id, messages, xp, level,
     petals_table, petals_bag,
     blossoms, dm_status,
+    equipped_color,
     gamble_a_wins, gamble_a_losses,
     gamble_b_wins, gamble_b_losses,
     gamble_c_wins, gamble_c_losses,
     gamble_d_wins, gamble_d_losses
   ) VALUES (
-    ?,?,?,?,?,?,?,
+    ?,?,?,?,?,?,?,?,
     ?,?,?,?,?,?,?,?,?
   )
 `).run(
@@ -160,6 +169,8 @@ function getUser(id) {
   user.petals_bag,
   user.blossoms,
   user.dm_status,
+
+  user.equipped_color,
 
   user.gamble_a_wins,
   user.gamble_a_losses,
@@ -186,6 +197,7 @@ function saveUser(u) {
       petals_bag=?,
       blossoms=?,
       dm_status=?,
+      equipped_color=?,
 
       gamble_a_wins=?,
       gamble_a_losses=?,
@@ -206,6 +218,8 @@ function saveUser(u) {
     u.blossoms,
     u.dm_status,
 
+    u.equipped_color,
+
     u.gamble_a_wins,
     u.gamble_a_losses,
     u.gamble_b_wins,
@@ -218,58 +232,6 @@ function saveUser(u) {
     u.id
   );
 }
-function generateShop() {
-  db.prepare("DELETE FROM shop").run();
-
-  const items = [];
-
-  for (let i = 1; i <= 5; i++) {
-    items.push({
-      name: `pastelitem${i}`,
-      rarity: "common",
-      price: SHOP_PRICES.common,
-      color_data: "#cccccc"
-    });
-  }
-
-  for (let i = 1; i <= 3; i++) {
-    items.push({
-      name: `neonitem${i}`,
-      rarity: "neon",
-      price: SHOP_PRICES.neon,
-      color_data: "#ff00ff"
-    });
-  }
-
-  for (let i = 1; i <= 2; i++) {
-    items.push({
-      name: `rareitem${i}`,
-      rarity: "rare",
-      price: SHOP_PRICES.rare,
-      color_data: "#ff0000"
-    });
-  }
-
-  const insert = db.prepare(`
-    INSERT INTO shop (name, rarity, price, color_data)
-    VALUES (?, ?, ?, ?)
-  `);
-
-  for (const item of items) {
-    insert.run(item.name, item.rarity, item.price, item.color_data);
-  }
-}
-function loadShop() {
-  const items = db.prepare("SELECT * FROM shop").all();
-
-  if (items.length === 0) {
-    generateShop();
-    return db.prepare("SELECT * FROM shop").all();
-  }
-
-  return items;
-}
-
 
 /* =====================
    BLOOM HELPERS
@@ -288,17 +250,16 @@ function bloomPetals() {
 /* =====================
    READY
 ===================== */
-client.once("ready", () => {
-  console.log(`🤖 Rusty online as ${client.user.tag}`);
-});
+
 
 function isAdmin(member) {
-  return member.permissions.has("ADMINISTRATOR");
+  return member.permissions.has("Administrator");
 }
+
 /* =====================
    MESSAGE HANDLER
 ===================== */
-client.on("messageCreate", (message) => {
+client.on("messageCreate", async (message) => {
   if (message.author.bot) return;
 
   const content = message.content.toLowerCase();
@@ -306,20 +267,53 @@ client.on("messageCreate", (message) => {
   const mentionedUser = message.mentions.users.first();
   const user = getUser(message.author.id);
 
+  // ─── Walter AI commands ───
+if (args[0].startsWith("w")) {
+  const handled = await handleWalterCommand(message, args, user);
+  if (handled !== false) return;
+}
+
+  //// Stats system
+  if (args[0] === "wstats") {
+  const embed = new MessageEmbed()
+    .setTitle("🤖 Bot Status")
+    .setColor("#5865F2")
+    .addField("Status", botStatus, true)
+    .addField("Version", botVersion, true)
+    .addField(
+      "Blossoms Dropped",
+      `${db.prepare("SELECT SUM(value) as v FROM meta WHERE key LIKE 'blossoms_%'").get()?.v || 0}`,
+      true
+    );
+
+  message.channel.send({ embeds: [embed] });
+
+  if (updateMessage && updateMessage.length > 0) {
+    const updateEmbed = new MessageEmbed()
+      .setTitle("🟢 Upcoming Updates")
+      .setColor("#57F287")
+      .setDescription(updateMessage);
+
+    message.channel.send({ embeds: [updateEmbed] });
+  }
+
+  return;
+}
+
   /* =====================
    ADMIN: GIVE PETALS
 ===================== */
 
 if (args[0] === "wadmingive") {
-  if (!isAdmin(message.member)) {
-    message.channel.send("❌ You don’t have permission to do that.");
+  if (!message.member.permissions.has("Administrator")) {
+    message.channel.send("❌ Admins only.");
     return;
   }
 
   const amt = parseInt(args[1]);
   const targetUser = message.mentions.users.first();
 
-  if (!targetUser || isNaN(amt)) {
+  if (!targetUser || isNaN(amt) || amt <= 0) {
     message.channel.send("❌ Usage: wadmingive <amount> @user");
     return;
   }
@@ -333,6 +327,66 @@ if (args[0] === "wadmingive") {
   );
   return;
 }
+if (args[0] === "wget") {
+  // ─── PETALS: wget all ───
+  if (args[1] === "all") {
+    user.petals_table += user.petals_bag;
+    user.petals_bag = 0;
+    saveUser(user);
+    message.channel.send("🪑 All petals moved to table");
+    return;
+  }
+
+  // ─── PETALS: wget <amount> ───
+  const maybeNumber = parseInt(args[1]);
+  if (!isNaN(maybeNumber)) {
+    const amt = maybeNumber;
+
+    if (amt <= 0 || amt > user.petals_bag) {
+      message.channel.send("❌ Invalid amount");
+      return;
+    }
+
+    user.petals_bag -= amt;
+    user.petals_table += amt;
+    saveUser(user);
+
+    message.channel.send(`🪑 Moved **${amt} petals** to table`);
+    return;
+  }
+
+  // ─── COLORS: wget <color name> ───
+  const colorName = args.slice(1).join(" ");
+
+  if (!colorName) {
+    message.channel.send("❌ Usage: wget <amount | color>");
+    return;
+  }
+
+  const owned = db.prepare(
+    "SELECT 1 FROM inventory WHERE user_id=? AND LOWER(item_name)=?"
+  ).get(user.id, colorName.toLowerCase());
+
+  if (!owned) {
+    message.channel.send("❌ You don’t own that color.");
+    return;
+  }
+
+  // Remove color from bag
+  db.prepare(
+    "DELETE FROM inventory WHERE user_id=? AND LOWER(item_name)=?"
+  ).run(user.id, colorName.toLowerCase());
+
+  user.equipped_color = colorName;
+  saveUser(user);
+
+  message.channel.send(
+    `🎨 **${colorName}** is ready.\nNow use \`wequip\` to equip it, or \`wremove\` to unequip it later.`
+  );
+  return;
+}
+
+
 
   /* =====================
      HELP
@@ -367,27 +421,6 @@ if (args[0] === "wadmingive") {
     message.channel.send({ embeds: [embed] });
     return;
   }
-  if (content === "wshop") {
-  const shop = loadShop();
-
-  const embed = new MessageEmbed()
-    .setTitle("🛒 Color Shop")
-    .setColor("#57F287")
-    .setDescription(
-      shop.map(item => {
-        const icon =
-          item.rarity === "common" ? "🟢" :
-          item.rarity === "neon" ? "🟣" :
-          item.rarity === "rare" ? "🔴" :
-          "🌈";
-
-        return `${icon} **${item.name}** — ${item.price.toLocaleString()} 🌸`;
-      }).join("\n")
-    );
-
-  message.channel.send({ embeds: [embed] });
-  return;
-}
 
   /* =====================
      DM SETTINGS
@@ -444,10 +477,28 @@ if (args[0] === "wadmingive") {
     return;
   }
 
-  if (content === "wbag") {
-    message.channel.send(`🎒 Bag petals: **${user.petals_bag}**`);
-    return;
-  }
+if (args[0] === "wbag") {
+  const items = db.prepare(
+    "SELECT item_name FROM inventory WHERE user_id=?"
+  ).all(user.id);
+
+  const itemList = items.length
+    ? items.map(i => `• ${i.item_name}`).join("\n")
+    : "None";
+
+message.channel.send(
+  `🎒 **Bag**
+Blossoms: ${user.blossoms}
+Petals: ${user.petals_bag}
+
+🎨 **Colors**
+${itemList}
+
+To use items, use \`wget <item>\`.`
+);
+
+  return; // 🚨 THIS IS CRITICAL
+}
 
   if (content === "wpetals") {
     message.channel.send(`🌸 Total petals: **${user.petals_table + user.petals_bag}**`);
@@ -493,6 +544,64 @@ if (args[0] === "wadmingive") {
     message.channel.send(`🪑 Moved **${amt} petals** to table`);
     return;
   }
+  if (args[0] === "wequip") {
+  if (!user.equipped_color) {
+    message.channel.send("❌ You don’t have a color ready to equip. Use `wget <color>` first.");
+    return;
+  }
+
+  const color =
+    FIXED_COLORS.common.find(c => c.name === user.equipped_color) ||
+    FIXED_COLORS.neon.find(c => c.name === user.equipped_color) ||
+    FIXED_COLORS.rare.find(c => c.name === user.equipped_color);
+
+  if (!color) {
+    message.channel.send("❌ That color no longer exists.");
+    return;
+  }
+
+  const allColorNames = getAllColorRoleNames();
+  const rolesToRemove = message.member.roles.cache.filter(r =>
+    allColorNames.includes(r.name)
+  );
+
+  if (rolesToRemove.size > 0) {
+    await message.member.roles.remove(rolesToRemove);
+  }
+
+  const role = await getOrCreateColorRole(
+    message.guild,
+    color.name,
+    color.hex
+  );
+
+  await message.member.roles.add(role);
+
+  message.channel.send(`🎨 Equipped **${color.name}**`);
+  return;
+}
+if (args[0] === "wremove") {
+  if (!user.equipped_color) {
+    message.channel.send("❌ You don’t have a color equipped.");
+    return;
+  }
+
+  const colorName = user.equipped_color;
+
+  const role = message.guild.roles.cache.find(r => r.name === colorName);
+  if (role && message.member.roles.cache.has(role.id)) {
+    await message.member.roles.remove(role);
+  }
+
+  db.prepare(
+    "INSERT INTO inventory (user_id, item_name) VALUES (?,?)"
+  ).run(user.id, colorName.toLowerCase());
+  user.equipped_color = null;
+  saveUser(user);
+
+  message.channel.send(`🎒 **${colorName}** was removed and returned to your bag.`);
+  return;
+}
 
   if (args[0] === "wgive") {
     const amt = parseInt(args[1]);
@@ -508,6 +617,60 @@ if (args[0] === "wadmingive") {
     message.channel.send(`🎁 Gave **${amt} petals** to <@${mentionedUser.id}>`);
     return;
   }
+  if (args[0] === "wbuy") {
+  const itemName = args.slice(1).join(" ");
+  if (!itemName) {
+    message.channel.send("❌ Usage: wbuy <colorname>");
+    return;
+  }
+
+  const item = db.prepare(
+  "SELECT * FROM shop WHERE LOWER(name) = ?"
+).get(itemName.toLowerCase());
+
+  if (!item) {
+    message.channel.send("❌ That color is not in the shop.");
+    return;
+  }
+  const blossomCost =
+  item.rarity === "neon" ? 1 :
+  item.rarity === "rare" ? 3 : 0;
+
+if (user.blossoms < blossomCost) {
+  message.channel.send(
+    `❌ You need **${blossomCost} blossom(s)** to buy this color.`
+  );
+  return;
+}
+
+
+  if (user.petals_table < item.price) {
+    message.channel.send("❌ Not enough petals on your table.");
+    return;
+  }
+
+  const owned = db.prepare(
+  "SELECT 1 FROM inventory WHERE user_id=? AND LOWER(item_name)=?"
+).get(user.id, item.name.toLowerCase());
+
+  if (owned) {
+    message.channel.send("❌ You already own this color.");
+    return;
+  }
+
+  user.petals_table -= item.price;
+user.blossoms -= blossomCost;
+saveUser(user);
+
+ db.prepare(
+  "INSERT INTO inventory (user_id, item_name) VALUES (?,?)"
+).run(user.id, item.name.toLowerCase());
+
+  message.channel.send(
+  `🎨 You bought **${item.name}**.\nTo view your colors, use \`wbag\`.`
+);
+  return;
+}
 
   /* =====================
      COINFLIP
@@ -745,7 +908,150 @@ if (args[0] === "wgamble") {
   saveUser(user);
 });
 
+
+const adminCommands = [
+  {
+    name: "admin-commands",
+    description: "List admin-only commands and bot status"
+  },
+  {
+    name: "change-stat",
+    description: "Change bot status",
+    options: [
+      {
+        name: "status",
+        type: 3,
+        description: "alive / offline / updating / restarting",
+        required: true
+      }
+    ]
+  },
+  {
+    name: "update-add",
+    description: "Set update message (max 200 chars)",
+    options: [
+      {
+        name: "message",
+        type: 3,
+        description: "Update text",
+        required: true
+      }
+    ]
+  }
+];
+
+client.once("ready", async () => {
+  console.log(`🤖 Rusty online as ${client.user.tag}`);
+
+  // ─── Shop rotation check ───
+  const now = Date.now();
+  const rotationMs = SHOP_ROTATION_DAYS * 24 * 60 * 60 * 1000;
+  const lastRotation = getMeta("lastShopRotation", 0);
+
+  if (now - lastRotation >= rotationMs) {
+    console.log("🛒 Rotating shop (8-day refresh)");
+    generateShop();
+    setMeta("lastShopRotation", now);
+  } else {
+    console.log("🛒 Shop is still current");
+  }
+
+  // ─── Slash command registration ───
+  const rest = new REST({ version: "9" }).setToken(process.env.DISCORD_TOKEN);
+
+  try {
+    await rest.put(
+      Routes.applicationCommands(client.user.id),
+      { body: adminCommands }
+    );
+    console.log("✅ Admin slash commands registered");
+  } catch (err) {
+    console.error("❌ Failed to register admin slash commands", err);
+  }
+});
+
+client.on("interactionCreate", async (interaction) => {
+  if (!interaction.isCommand()) return;
+
+  if (interaction.commandName === "admin-commands") {
+    if (!interaction.member.permissions.has("Administrator")) {
+      await interaction.reply({
+        content: "❌ Admins only.",
+        ephemeral: true
+      });
+      return;
+    }
+    if (interaction.commandName === "change-stat") {
+  if (!interaction.member.permissions.has("Administrator")) {
+    await interaction.reply({
+      content: "❌ Admins only.",
+      ephemeral: true
+    });
+    return;
+  }
+
+  const status = interaction.options.getString("status");
+  botStatus = status;
+  setMeta("botStatus", botStatus);
+
+  await interaction.reply({
+    content: `✅ Bot status set to **${botStatus}**`,
+    ephemeral: true
+  });
+}
+
+if (interaction.commandName === "update-add") {
+  if (!interaction.member.permissions.has("Administrator")) {
+    await interaction.reply({
+      content: "❌ Admins only.",
+      ephemeral: true
+    });
+    return;
+  }
+
+  const msg = interaction.options.getString("message").slice(0, 200);
+  updateMessage = msg;
+  setMeta("updateMessage", updateMessage);
+
+  await interaction.reply({
+    content: "✅ Update message saved.",
+    ephemeral: true
+  });
+}
+
+    const embed = new MessageEmbed()
+      .setTitle("🛠️ Admin Commands")
+      .setColor("#ED4245")
+      .setDescription(`
+**Text Admin Commands**
+• \`wadmingive <amount> @user\`
+• \`wstats\`
+• \`wblossomdrop\`
+
+**Slash Commands**
+• /admin-commands
+
+**Inactive / Disabled**
+• /wipe-user
+• /force-rotation
+• /economy-reset
+      `)
+      .addField(
+        "📊 Bot Status",
+        `Messages tracked: **${totalMessages}**
+Active bloom: **${activeBloom ? "YES" : "NO"}**
+Shop rotation: **Every ${SHOP_ROTATION_DAYS} days**`
+      )
+      .setFooter({ text: "Admin-only controls panel" });
+
+    await interaction.reply({
+      embeds: [embed],
+      ephemeral: true
+    });
+  }
+});
+
 /* =====================
    LOGIN
 ===================== */
-client.login(process.env.MTQ2NzQzMjYyMzAwODc3NjI4NQ.GSbmht.K2bXlEBLLQlwygS4ySnJ5syEg2RyVBKYgGaCgQ);
+client.login(process.env.DISCORD_TOKEN);
