@@ -268,9 +268,18 @@ client.on("messageCreate", async (message) => {
   const user = getUser(message.author.id);
 
   // ─── Walter AI commands ───
-if (args[0].startsWith("ws")) {
-  const handled = await handleWalterCommand(message, args, user);
-  if (handled !== false) return;
+const walterCommands = [
+  "wsearch",
+  "wsummary",
+  "wexplain",
+  "wsearchr"
+];
+
+if (walterCommands.includes(args[0])) {
+  await handleWalterCommand(message, args, user);
+  return;
+}
+
 }
 
   //// Stats system
