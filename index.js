@@ -279,8 +279,11 @@ if (walterCommands.includes(args[0])) {
   await handleWalterCommand(message, args, user);
   return;
 }
-
-
+// ─── Walter normal chat (AI) ───
+if (message.content.toLowerCase().includes("walter")) {
+  await require("./walter-ai")(message);   // change ./walter-ai to match your file name & location
+  return;
+}
 
   //// Stats system
   if (args[0] === "wstats") {
