@@ -11,9 +11,9 @@ module.exports = async function handleSearch(message, args) {
 
   try {
     const response = await openai.chat.completions.create({
-      model: "llama-3.1-70b-versatile",   // ← fixed
+      model: "groq/compound",   // ← real web search + reasoning (no more links-only)
       messages: [
-        { role: "system", content: "You are Walter. Give a short, clear, friendly summary of the topic." },
+        { role: "system", content: "You are Walter. Give a short, friendly, accurate summary of the topic. Use simple language. Include key facts, no raw links unless helpful." },
         { role: "user", content: query }
       ],
       max_tokens: 600,
@@ -21,7 +21,7 @@ module.exports = async function handleSearch(message, args) {
     });
 
     const summary = response.choices[0].message.content;
-    await message.reply(`🪶 Okay, here's what I know about **${query}**:\n\n${summary}`);
+    await message.reply(`🪶 Okay, about **${query}**:\n\n${summary}`);
   } catch (err) {
     console.error("wsearch error:", err.message);
     await message.reply("🪶 Ay, the search got stuck… try again?");

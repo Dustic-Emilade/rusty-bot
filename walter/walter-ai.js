@@ -18,7 +18,7 @@ Never say you are an AI.
 module.exports = async function handleWalterAI(message) {
   try {
     const response = await openai.chat.completions.create({
-      model: "llama-3.1-70b-versatile",   // ← this one works right now
+      model: "llama-3.3-70b-versatile",   // ← current working model (Feb 2026)
       messages: [
         { role: "system", content: WALTER_PERSONALITY },
         { role: "user", content: message.content }
