@@ -472,6 +472,7 @@ if (args[0] === "wget") {
   /* =====================
      VAULT / ECONOMY
   ===================== */
+  console.log("WTABLE HANDLER HIT", Date.now());
   if (content === "wtable") {
     message.channel.send(`🪑 Table petals: **${user.petals_table}**`);
     return;
