@@ -22,20 +22,24 @@ async function handleWalterCommand(message) {
   const args = content.split(" ");
   const command = args[0];
 
-  if (command === "wsearch" || command === "wexplain" || command === "wsummary" || command === "wsearchr") {
-    const query = args.slice(1).join(" ");
+  const handleWalterCommand = require("./index");
 
-    if (detectDrama(query)) {
-      await message.channel.send(refusalResponse());
-      return true;
-    }
+if (
+  command === "wsearch" ||
+  command === "wexplain" ||
+  command === "wsummary" ||
+  command === "wsearchr"
+) {
+  const query = args.slice(1).join(" ");
 
-    // Placeholder response for now
-    await message.channel.send(
-      "…I’m still figuring out how to explain things. Check back soon."
-    );
+  if (detectDrama(query)) {
+    await message.channel.send(refusalResponse());
     return true;
   }
+
+  // hand off to the real handler
+  return await handleWalterCommand(message, args);
+}
 
   return false;
 }
