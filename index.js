@@ -1,7 +1,6 @@
 const { Client, Intents, MessageEmbed } = require("discord.js");
 const Database = require("better-sqlite3");
-// const handleWalterCommand = require("./walter");
-
+const handleWalterCommand = require("./walter");
 
 const { REST } = require("@discordjs/rest");
 const { Routes } = require("discord-api-types/v9");
@@ -269,17 +268,17 @@ client.on("messageCreate", async (message) => {
   const user = getUser(message.author.id);
 
   // ─── Walter AI commands ───
-//const walterCommands = [
-  //"wsearch",
-  //"wsummary",
-  //"wexplain",
-  //"wsearchr"
-//];
+const walterCommands = [
+  "wsearch",
+  "wsummary",
+  "wexplain",
+  "wsearchr"
+];
 
-//if (walterCommands.includes(args[0])) {
-  //await handleWalterCommand(message, args, user);
-  //return;
-//}
+if (walterCommands.includes(args[0])) {
+  await handleWalterCommand(message, args, user);
+  return;
+}
 
 
 
@@ -536,25 +535,7 @@ To use items, use \`wget <item>\`.`
     return;
   }
 
-  if (args[0] === "wget") {
-    if (args[1] === "all") {
-      user.petals_table += user.petals_bag;
-      user.petals_bag = 0;
-      saveUser(user);
-      message.channel.send("🪑 All petals moved to table");
-      return;
-    }
-    const amt = parseInt(args[1]);
-    if (!amt || amt <= 0 || amt > user.petals_bag) {
-      message.channel.send("❌ Invalid amount");
-      return;
-    }
-    user.petals_bag -= amt;
-    user.petals_table += amt;
-    saveUser(user);
-    message.channel.send(`🪑 Moved **${amt} petals** to table`);
-    return;
-  }
+  
   if (args[0] === "wequip") {
   if (!user.equipped_color) {
     message.channel.send("❌ You don’t have a color ready to equip. Use `wget <color>` first.");
