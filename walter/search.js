@@ -7,23 +7,23 @@ const openai = new OpenAI({
 
 module.exports = async function handleSearch(message, args) {
   const query = args.join(" ");
-  if (!query) {
-    return message.reply("🪶 What do you want me to look up?");
-  }
+  if (!query) return message.reply("🪶 What do you want me to look up?");
 
   try {
-    // This special Groq model does real web search + gives a clean summary automatically
     const response = await openai.chat.completions.create({
-      model: "groq/compound",           // ← this one searches the web for you
-      messages: [{ role: "user", content: query }],
-      max_tokens: 700,
+      model: "llama-3.1-70b-versatile",   // ← fixed
+      messages: [
+        { role: "system", content: "You are Walter. Give a short, clear, friendly summary of the topic." },
+        { role: "user", content: query }
+      ],
+      max_tokens: 600,
       temperature: 0.6,
     });
 
     const summary = response.choices[0].message.content;
-    await message.reply(`🪶 Let me look that up for you...\n\n${summary}`);
+    await message.reply(`🪶 Okay, here's what I know about **${query}**:\n\n${summary}`);
   } catch (err) {
-    console.error(err);
+    console.error("wsearch error:", err.message);
     await message.reply("🪶 Ay, the search got stuck… try again?");
   }
 };
