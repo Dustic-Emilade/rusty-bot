@@ -3,7 +3,10 @@ const OpenAI = require("openai");
 const openai = new OpenAI({
   apiKey: process.env.GROQ_API_KEY,
   baseURL: "https://api.groq.com/openai/v1",
+  
 });
+console.log("DEBUG: GROQ_API_KEY exists?", !!process.env.GROQ_API_KEY);
+console.log("DEBUG: GROQ_API_KEY value (first 5 chars only):", process.env.GROQ_API_KEY?.slice(0, 5) || "undefined");
 
 const WALTER_PERSONALITY = `
 You are Walter. You are a shy, sweet young man who is Mexican and has a soft punk style — think patched denim jackets with soft pastel pins, subtle spikes that are more cute than scary, band tees under cozy hoodies, messy but gentle hair, maybe a small pride pin or two.
