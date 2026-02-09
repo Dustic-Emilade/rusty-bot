@@ -1,64 +1,29 @@
-const fetch = require("node-fetch");
-const { ALLOWED_DOMAINS, BLOCKED_DOMAINS } = require("./walterRules");
+const OpenAI = require("openai");
 
-function isAllowed(url) {
-  if (!url) return false;
+const openai = new OpenAI({
+  apiKey: process.env.GROQ_API_KEY,
+  baseURL: "https://api.groq.com/openai/v1",
+});
 
-  const lower = url.toLowerCase();
-
-  if (BLOCKED_DOMAINS.some(d => lower.includes(d))) return false;
-  if (ALLOWED_DOMAINS.some(d => lower.includes(d))) return true;
-
-  return false;
-}
-
-module.exports = async function (message, args) {
+module.exports = async function handleSearch(message, args) {
   const query = args.join(" ");
   if (!query) {
-    await message.channel.send("You gotta give me something to search for.");
-    return true;
+    return message.reply("🪶 What do you want me to look up?");
   }
 
-  await message.channel.send("🔍 Searching…");
-
-  const res = await fetch(
-    `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_redirect=1`
-  );
-
-  const data = await res.json();
-
-  const results = [];
-
-  if (data.AbstractURL && isAllowed(data.AbstractURL)) {
-    results.push({
-      text: data.AbstractText,
-      url: data.AbstractURL
+  try {
+    // This special Groq model does real web search + gives a clean summary automatically
+    const response = await openai.chat.completions.create({
+      model: "groq/compound",           // ← this one searches the web for you
+      messages: [{ role: "user", content: query }],
+      max_tokens: 700,
+      temperature: 0.6,
     });
-  }
 
-  if (data.RelatedTopics) {
-    for (const item of data.RelatedTopics) {
-      if (item.FirstURL && isAllowed(item.FirstURL)) {
-        results.push({
-          text: item.Text,
-          url: item.FirstURL
-        });
-      }
-      if (results.length >= 3) break;
-    }
+    const summary = response.choices[0].message.content;
+    await message.reply(`🪶 Let me look that up for you...\n\n${summary}`);
+  } catch (err) {
+    console.error(err);
+    await message.reply("🪶 Ay, the search got stuck… try again?");
   }
-
-  if (results.length === 0) {
-    await message.channel.send("I couldn’t find any solid sources for that.");
-    return true;
-  }
-
-  let reply = "**Here’s what I found:**\n";
-  for (const r of results) {
-    reply += `• ${r.text}\n${r.url}\n\n`;
-  }
-
-  await message.channel.send(reply);
-  return true;
 };
-
