@@ -940,6 +940,10 @@ const adminCommands = [
   }
 ];
 
+function generateShop() {
+  console.log("🧩 generateShop() ran");
+}
+
 client.once("ready", async () => {
   console.log(`🤖 Rusty online as ${client.user.tag}`);
 
