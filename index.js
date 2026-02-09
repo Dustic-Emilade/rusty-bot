@@ -280,7 +280,7 @@ if (walterCommands.includes(args[0])) {
   return;
 }
 
-}
+
 
   //// Stats system
   if (args[0] === "wstats") {
