@@ -1,6 +1,7 @@
 const { Client, Intents, MessageEmbed } = require("discord.js");
 const Database = require("better-sqlite3");
-const handleWalterCommand = require("./walter");
+// const handleWalterCommand = require("./walter");
+
 
 const { REST } = require("@discordjs/rest");
 const { Routes } = require("discord-api-types/v9");
@@ -268,17 +269,17 @@ client.on("messageCreate", async (message) => {
   const user = getUser(message.author.id);
 
   // ─── Walter AI commands ───
-const walterCommands = [
-  "wsearch",
-  "wsummary",
-  "wexplain",
-  "wsearchr"
-];
+//const walterCommands = [
+  //"wsearch",
+  //"wsummary",
+  //"wexplain",
+  //"wsearchr"
+//];
 
-if (walterCommands.includes(args[0])) {
-  await handleWalterCommand(message, args, user);
-  return;
-}
+//if (walterCommands.includes(args[0])) {
+  //await handleWalterCommand(message, args, user);
+  //return;
+//}
 
 
 
